@@ -42,7 +42,7 @@ uv run --no-sync pytest tests/ -v
 | Variable | Default | Description |
 |---|---|---|
 | `QGIS_MCP_HOST` | `localhost` | Host for QGIS plugin socket connection |
-| `QGIS_MCP_PORT` | `9876` | Port for QGIS plugin socket connection |
+| `QGIS_MCP_PORT` | `9876` | Port for QGIS plugin socket connection. The plugin reads it too (`constants.env_port()`): set where QGIS is launched, it overrides the port saved in QgsSettings for that window without writing over it, since QgsSettings is per profile and shared by every window on it (#54). |
 | `QGIS_MCP_INSTANCES` | _(unset)_ | Comma-separated `name=port` / `name=host:port` list of QGIS instances addressable from one server (e.g. `default=9876,b=9877`). Unset = a single instance named `default` from `QGIS_MCP_HOST`/`QGIS_MCP_PORT`. Names match `[A-Za-z0-9_-]+`. |
 | `QGIS_MCP_TOKEN` | _(unset)_ | Optional shared secret. When set, the plugin requires a matching `token` on every command (constant-time compare, and a client is disconnected after `MAX_AUTH_FAILURES` consecutive rejections); the client attaches it automatically. Unset = no auth (default, backward-compatible). Required when the plugin binds a non-loopback address - the plugin refuses to start otherwise. |
 | `QGIS_MCP_TRANSPORT` | `stdio` | MCP transport: `stdio` or `streamable-http` |

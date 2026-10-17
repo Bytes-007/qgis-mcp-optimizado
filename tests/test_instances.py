@@ -484,3 +484,72 @@ def test_probe_instance_reports_a_closed_peer_as_unreachable():
     finally:
         srv._qgis_connections.pop("closed-peer", None)
         ours.close()
+
+
+@pytest.mark.asyncio
+async def test_list_instances_flags_a_listener_that_is_not_qgis():
+    """A port that accepts but never answers as QGIS is reachable, with a note saying so.
+
+    Issue #54: Blender's MCP add-on also defaults to 9876, and a bare
+    `reachable: True` sent the user looking for a QGIS problem.
+    """
+    with (
+        patch.dict(os.environ, {"QGIS_MCP_INSTANCES": "a=9876"}, clear=True),
+        patch("qgis_mcp.server._probe_instance", side_effect=[True]),
+        patch("qgis_mcp.server._instance_identity", AsyncMock(return_value={})),
+    ):
+        result = await srv.list_qgis_instances(make_ctx())
+
+    entry = result["instances"][0]
+    assert entry["reachable"] is True
+    assert "another program holds this port" in entry["note"]
+
+
+def test_client_names_a_foreign_listener_on_framing_errors():
+    """A peer that answers with something other than a QGIS frame gets a usable error."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+
+    def answer_garbage():
+        conn, _ = listener.accept()
+        with conn:
+            conn.recv(65536)
+            conn.sendall(HEADER_STRUCT.pack(9) + b"not json!")
+
+    thread = threading.Thread(target=answer_garbage, daemon=True)
+    thread.start()
+    client = QgisMCPClient("127.0.0.1", port)
+    try:
+        assert client.connect()
+        with pytest.raises(ConnectionError, match=rf"127\.0\.0\.1:{port}.*another program"):
+            client.send_command("ping", timeout=5)
+        assert client.socket is None
+    finally:
+        thread.join(timeout=5)
+        listener.close()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, None), ("", None), ("  ", None), ("9877", 9877), (" 9877 ", 9877)],
+)
+def test_plugin_env_port(plugin_handlers, monkeypatch, value, expected):
+    """QGIS_MCP_PORT reaches the plugin too, so one value configures both halves (#54)."""
+    from qgis_mcp_plugin.constants import env_port
+
+    if value is None:
+        monkeypatch.delenv("QGIS_MCP_PORT", raising=False)
+    else:
+        monkeypatch.setenv("QGIS_MCP_PORT", value)
+    assert env_port() == expected
+
+
+@pytest.mark.parametrize("value", ["abc", "80", "70000", "0"])
+def test_plugin_env_port_rejects_what_the_spin_box_cannot_hold(plugin_handlers, monkeypatch, value):
+    from qgis_mcp_plugin.constants import env_port
+
+    monkeypatch.setenv("QGIS_MCP_PORT", value)
+    with pytest.raises(ValueError, match="QGIS_MCP_PORT"):
+        env_port()

@@ -114,9 +114,14 @@ async def test_listing_survives_an_instance_that_stops_answering():
     ):
         result = await srv.list_qgis_instances(make_ctx())
 
-    assert result["instances"] == [
-        {"name": "a", "host": "localhost", "port": 9876, "reachable": True}
-    ]
+    [entry] = result["instances"]
+    assert {k: v for k, v in entry.items() if k != "note"} == {
+        "name": "a",
+        "host": "localhost",
+        "port": 9876,
+        "reachable": True,
+    }
+    assert "did not answer as QGIS" in entry["note"]
 
 
 @pytest.mark.asyncio

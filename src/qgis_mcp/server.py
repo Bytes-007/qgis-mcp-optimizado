@@ -680,13 +680,21 @@ async def list_qgis_instances(ctx: Context) -> dict[str, Any]:
             for name, ok in zip(instances, reachable, strict=True)
         )
     )
-    return {
-        "instances": [
-            {"name": name, "host": host, "port": port, "reachable": ok, **identity}
-            for (name, (host, port)), ok, identity in zip(
-                instances.items(), reachable, identities, strict=True
+    entries = []
+    for (name, (host, port)), ok, identity in zip(
+        instances.items(), reachable, identities, strict=True
+    ):
+        entry = {"name": name, "host": host, "port": port, "reachable": ok, **identity}
+        if ok and not identity:
+            # Accepting a connection is all the probe checks, and any program on
+            # the port passes it (Blender's MCP add-on also defaults to 9876).
+            entry["note"] = (
+                "Accepted the connection but did not answer as QGIS: it may be busy, "
+                "or another program holds this port."
             )
-        ],
+        entries.append(entry)
+    return {
+        "instances": entries,
         # The name a call with no `instance` argument actually resolves to - not
         # the constant "default", which would be a lie whenever no entry carries
         # that name. This is the field an agent reads to learn where its

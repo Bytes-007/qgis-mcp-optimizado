@@ -323,7 +323,8 @@ class QgisMCPServer(
             if isinstance(e, OSError) and e.errno in ADDR_IN_USE:
                 self.start_error = (
                     f"Port {self.port} is already in use - another QGIS window or program "
-                    "is on it. Pick a different port for this window."
+                    "is on it. Pick a different port in the dropdown next to the MCP "
+                    "toolbar button, or launch QGIS with QGIS_MCP_PORT set."
                 )
             QgsMessageLog.logMessage(f"Failed to start server: {e!s}", self.LOG_TAG, MSG_CRITICAL)
             self.stop()

@@ -166,10 +166,18 @@ class QgisMCPClient:
             self.disconnect()
             raise CommandTimeout(f"Socket operation timed out after {timeout}s") from err
         except ValueError as err:
-            # Protocol framing error (e.g. "Response too large") - the socket
-            # buffer is now out of sync, so close it and let callers reconnect.
+            # Protocol framing error (e.g. "Response too large", or a payload
+            # that is not JSON) - the socket buffer is now out of sync, so close
+            # it and let callers reconnect. The plugin never frames either, so
+            # whatever answered is most likely not QGIS: Blender's MCP add-on,
+            # for one, also defaults to 9876.
             self.disconnect()
-            raise ConnectionError("Protocol framing error, connection reset") from err
+            raise ConnectionError(
+                f"Protocol framing error from {self.host}:{self.port}, connection reset. "
+                "Whatever answered there does not speak the QGIS MCP protocol; another "
+                "program may hold the port. Give the QGIS plugin its own port (the "
+                "dropdown next to its toolbar button) and set QGIS_MCP_PORT to match."
+            ) from err
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ConnectionError):
             self.disconnect()
             raise  # Let callers handle reconnection

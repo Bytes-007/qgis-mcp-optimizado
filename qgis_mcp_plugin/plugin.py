@@ -32,6 +32,7 @@ from .compat import (
     ALIGN_CENTER,
     MSG_CRITICAL,
     MSG_INFO,
+    MSG_WARNING,
     MSGBOX_ACCEPT_ROLE,
     MSGBOX_QUESTION,
     MSGBOX_REJECT_ROLE,
@@ -46,7 +47,14 @@ from .configurator import (
     _remove_refresh_from_entry,
     write_json_atomic,
 )
-from .constants import DEFAULT_PORT, PLUGIN_DIR, SETTINGS_PREFIX
+from .constants import (
+    DEFAULT_PORT,
+    MAX_PORT,
+    MIN_PORT,
+    PLUGIN_DIR,
+    SETTINGS_PREFIX,
+    env_port,
+)
 from .server import QgisMCPServer
 
 
@@ -74,15 +82,12 @@ class QgisMCPPlugin:
         # Main action (used for menu entry + click handler)
         self.action = QAction(self._logo_icon(), "Run MCP", self.iface.mainWindow())
         self.action.setCheckable(True)
-        self.action.setToolTip(f"Start MCP server on port {DEFAULT_PORT}")
         self.action.triggered.connect(self.toggle_server)
 
         # Port config in dropdown menu
         self.port_spin = QSpinBox()
-        self.port_spin.setRange(1024, 65535)
-        self.port_spin.setValue(DEFAULT_PORT)
+        self.port_spin.setRange(MIN_PORT, MAX_PORT)
         self.port_spin.setPrefix("Port: ")
-        self.port_spin.valueChanged.connect(self._save_port)
 
         port_widget = QWidget()
         port_layout = QHBoxLayout()
@@ -141,9 +146,17 @@ class QgisMCPPlugin:
                 sub.setIcon(self._logo_icon())
                 break
 
-        # Restore saved port
-        saved_port = settings.value(f"{SETTINGS_PREFIX}/port", DEFAULT_PORT, type=int)
-        self.port_spin.setValue(saved_port)
+        # QGIS_MCP_PORT beats the saved port. Connecting _save_port only after
+        # setValue keeps it out of QgsSettings: saved, it would become the port
+        # of every other window on this profile too.
+        port = settings.value(f"{SETTINGS_PREFIX}/port", DEFAULT_PORT, type=int)
+        try:
+            port = env_port() or port
+        except ValueError as e:
+            QgsMessageLog.logMessage(f"{e}, using port {port}", "MCP", MSG_WARNING)
+        self.port_spin.setValue(port)
+        self.action.setToolTip(f"Start MCP server on port {port}")
+        self.port_spin.valueChanged.connect(self._save_port)
 
         # Auto-start if enabled
         if self.autostart_cb.isChecked():
@@ -213,6 +226,7 @@ class QgisMCPPlugin:
     def _save_port(self, port):
         """Persist port preference."""
         QgsSettings().setValue(f"{SETTINGS_PREFIX}/port", port)
+        self.action.setToolTip(f"Start MCP server on port {port}")
 
     def _green_logo_icon(self):
         """Load the green MCP logo for active state."""
@@ -379,7 +393,7 @@ class QgisMCPPlugin:
                 self.server = None
             self.action.setIcon(self._logo_icon())
             self.action.setText("Run MCP")
-            self.action.setToolTip("Start MCP server")
+            self.action.setToolTip(f"Start MCP server on port {self.port_spin.value()}")
             self.port_spin.setEnabled(True)
 
     def unload(self):

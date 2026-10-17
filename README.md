@@ -361,7 +361,7 @@ Groups: `system`, `project`, `layer`, `features`, `selection`, `style`, `canvas`
 | Environment variable | Default | Description |
 |---------------------|---------|-------------|
 | `QGIS_MCP_HOST` | `localhost` | Host for socket connection |
-| `QGIS_MCP_PORT` | `9876` | Port for socket connection |
+| `QGIS_MCP_PORT` | `9876` | Port for socket connection. The QGIS plugin reads it too: set in the environment QGIS is launched from, it overrides the port saved in the plugin's dropdown for that window. |
 | `QGIS_MCP_INSTANCES` | _(unset)_ | Address several running QGIS windows from one server. See [Multiple QGIS instances](#multiple-qgis-instances). |
 | `QGIS_MCP_TOKEN` | _(unset)_ | Optional shared secret. When set, the plugin rejects any command without a matching token. See [Authentication](#authentication). |
 | `QGIS_MCP_TRANSPORT` | `stdio` | MCP transport: `stdio` or `streamable-http` |
@@ -395,7 +395,9 @@ One exception: binding the plugin to a **non-loopback address** requires a token
 
 ### Multiple QGIS instances
 
-One server registration can drive several running QGIS windows. Start each QGIS with the plugin on its own port, then list them in `QGIS_MCP_INSTANCES` as comma-separated `name=port` or `name=host:port` entries:
+One server registration can drive several running QGIS windows. Start each QGIS with the plugin on its own port, then list them in `QGIS_MCP_INSTANCES` as comma-separated `name=port` or `name=host:port` entries.
+
+Set a window's port in the dropdown next to the MCP toolbar button (the arrow beside the logo) before starting the server. That choice is saved per QGIS profile, so two windows on the same profile would both start on it; launch each with its own `QGIS_MCP_PORT` instead (for example `QGIS_MCP_PORT=9877 qgis`), which overrides the saved port without changing it. The same applies when another program already listens on 9876 (Blender's MCP add-on does by default).
 
 ```json
 {

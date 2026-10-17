@@ -11,6 +11,31 @@ import os
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 9876
 
+# The port spin box's range, and so the range QGIS_MCP_PORT may name.
+MIN_PORT = 1024
+MAX_PORT = 65535
+
+
+def env_port():
+    """The port QGIS_MCP_PORT asks for, None when unset.
+
+    The saved port lives in QgsSettings, which is per profile, so two windows on
+    one profile would both start on it. The environment is per launch, and the
+    same variable the MCP server reads, so one value configures both halves.
+    Raises ValueError for a value the spin box could not hold.
+    """
+    raw = os.environ.get("QGIS_MCP_PORT", "").strip()
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError:
+        port = 0
+    if not MIN_PORT <= port <= MAX_PORT:
+        raise ValueError(f"QGIS_MCP_PORT={raw!r} is not a port between {MIN_PORT} and {MAX_PORT}")
+    return port
+
+
 # The plugin package directory - where metadata.txt and icons/ live. Anchored
 # here rather than on each module's own ``__file__`` so a module inside a
 # subpackage (``handlers/``) still resolves them correctly.
