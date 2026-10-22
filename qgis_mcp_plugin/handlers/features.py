@@ -121,6 +121,7 @@ class FeatureHandlers:
         expression=None,
         include_geometry=False,
         fields=None,
+        max_value_chars=None,
         **kwargs,
     ):
         layer = self._get_vector_layer(layer_id)
@@ -144,6 +145,14 @@ class FeatureHandlers:
                     f"Unknown field(s): {', '.join(missing)}; available: {', '.join(all_fields)}"
                 )
             returned = [name for name in all_fields if name in set(wanted)]
+
+        # One wide string column (a memo, a URL list) costs more than the rest
+        # of the payload together; the caller decides whether to pay it.
+        clip = None
+        if max_value_chars is not None:
+            clip = int(max_value_chars)
+            if clip <= 0:
+                raise CommandError("max_value_chars must be a positive integer")
 
         request = QgsFeatureRequest()
         requested = list(returned)
@@ -171,6 +180,7 @@ class FeatureHandlers:
         precision = 7 if layer.crs().isGeographic() else 3
         features = []
         skipped = 0
+        values_clipped = False
         for feature in layer.getFeatures(request):
             if skipped < offset:
                 skipped += 1
@@ -181,7 +191,11 @@ class FeatureHandlers:
             # Phase 1C: Flatten to {"_fid": id, ...attrs} instead of nested "attributes"
             feature_obj = {"_fid": feature.id()}
             for name in returned:
-                feature_obj[name] = self._convert_attribute(feature.attribute(name))
+                value = self._convert_attribute(feature.attribute(name))
+                if clip is not None and isinstance(value, str) and len(value) > clip:
+                    value = value[:clip] + f"…[{len(value) - clip} chars omitted]"
+                    values_clipped = True
+                feature_obj[name] = value
 
             if include_geometry and feature.hasGeometry():
                 geom = feature.geometry()
@@ -226,6 +240,7 @@ class FeatureHandlers:
             "features": features,
             # What coordinates in _geometry are in.
             "crs": layer.crs().authid(),
+            "value_chars_clipped": values_clipped,
         }
 
     @command
