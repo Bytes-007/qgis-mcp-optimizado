@@ -230,7 +230,7 @@ class FeatureHandlers:
             features.append(feature_obj)
 
         # Phase 1B: Stripped layer_id, layer_name, geometry_included
-        return {
+        response = {
             # Features in the layer, whether or not the expression selects them.
             "feature_count": feature_count,
             # Features the expression selects (the layer total when there is none).
@@ -240,8 +240,12 @@ class FeatureHandlers:
             "features": features,
             # What coordinates in _geometry are in.
             "crs": layer.crs().authid(),
-            "value_chars_clipped": values_clipped,
         }
+        if values_clipped:
+            # House style: caps are reported only when they bite, so the
+            # default call stays payload-identical to the uncapped response.
+            response["value_chars_clipped"] = True
+        return response
 
     @command
     def get_field_statistics(self, layer_id, field_name, **kwargs):

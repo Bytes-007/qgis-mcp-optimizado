@@ -60,8 +60,11 @@ for key in ("filename", "title", "crs", "layers", "layer_count"):
         check(f"get_project_info.{key} equal", u[key] == f[key])
 
 # --- 3. get_layer_features all fields: must be byte-identical content -------
+# (old fork builds carry a falsy value_chars_clipped; pop it before comparing)
 u = send(UP, "get_layer_features", {"layer_id": VEREDAS, "limit": 10})
 f = send(FORK, "get_layer_features", {"layer_id": VEREDAS, "limit": 10})
+# old fork builds carry a falsy value_chars_clipped entry; ignore it
+f.pop("value_chars_clipped", None)
 check("features(all fields): identical", u == f)
 
 # --- 4. get_layer_features fields projection: values must match upstream ----
@@ -80,6 +83,7 @@ expr = "upper('NOMBRE_VER') LIKE '%PANTANO%'" if True else None
 try:
     u = send(UP, "get_layer_features", {"layer_id": VEREDAS, "limit": 10, "expression": expr})
     f = send(FORK, "get_layer_features", {"layer_id": VEREDAS, "limit": 10, "expression": expr})
+    f.pop("value_chars_clipped", None)
     check("features(expression): identical", u == f)
 except Exception as e:
     check("features(expression): identical", False, str(e))
