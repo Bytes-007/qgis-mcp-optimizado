@@ -114,6 +114,17 @@ def test_message_log_refuses_an_unknown_level(log_server, CommandError):  # noqa
         log_server.get_message_log(level="error")
 
 
+@pytest.mark.parametrize(("n", "truncated"), [(3, True), (2, False)])
+def test_get_layers_flags_a_truncated_page(server, project, n, truncated):  # noqa: F811
+    project.mapLayers.return_value = {f"l{i}": MagicMock() for i in range(n)}
+
+    result = server.get_layers(limit=2)
+
+    assert result["count"] == min(n, 2)
+    assert result["total_count"] == n
+    assert result["truncated"] is truncated
+
+
 @pytest.mark.parametrize(("n", "truncated"), [(12, True), (10, False)])
 def test_project_info_flags_the_ten_layer_cap(server, project, n, truncated):  # noqa: F811
     project.mapLayers.return_value = {f"l{i}": MagicMock() for i in range(n)}

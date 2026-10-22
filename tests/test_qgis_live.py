@@ -154,6 +154,51 @@ def test_feature_expression_filter(client, setup_test_data):
         assert f["id"] >= 3
 
 
+def test_fields_projection_returns_only_the_asked_columns(client, setup_test_data):
+    resp = client.send_command(
+        "get_layer_features", {"layer_id": setup_test_data, "fields": ["id"], "limit": 5}
+    )
+    assert resp["status"] == "success"
+    result = resp["result"]
+    assert result["fields"] == ["id"]
+    for f in result["features"]:
+        assert "_fid" in f  # the id of the feature is always there
+        assert "id" in f
+        assert "name" not in f
+        assert "value" not in f
+
+
+def test_fields_projection_keeps_filtering_on_a_dropped_column(client, setup_test_data):
+    """The expression reads "value", which is not in fields: the filter must still
+    select the right features (the column is fetched, then dropped from the answer)."""
+    resp = client.send_command(
+        "get_layer_features",
+        {
+            "layer_id": setup_test_data,
+            "fields": ["id"],
+            "expression": "value > 150",
+            "limit": 5,
+        },
+    )
+    assert resp["status"] == "success"
+    result = resp["result"]
+    assert result["matched"] == 2  # the expression selects id 3 and 4
+    assert len(result["features"]) == 2
+    assert result["fields"] == ["id"]  # "value" filtered but is not returned
+    for f in result["features"]:
+        assert f["id"] >= 3
+        assert "value" not in f
+
+
+def test_fields_projection_rejects_unknown_columns(client, setup_test_data):
+    resp = client.send_command(
+        "get_layer_features", {"layer_id": setup_test_data, "fields": ["id", "nope"]}
+    )
+    assert resp["status"] == "error"
+    assert "nope" in resp["message"]
+    assert "available" in resp["message"]  # the refusal lists the real columns
+
+
 def test_geometry_exclusion(client, setup_test_data):
     resp = client.send_command("get_layer_features", {"layer_id": setup_test_data, "limit": 1})
     feature = resp["result"]["features"][0]

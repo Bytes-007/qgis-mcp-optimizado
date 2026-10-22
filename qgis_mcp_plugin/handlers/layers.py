@@ -149,7 +149,15 @@ class LayerHandlers:
 
             layers.append(layer_info)
 
-        return {"layers": layers, "total_count": total_count, "offset": offset, "limit": limit}
+        return {
+            "layers": layers,
+            "count": len(layers),
+            "total_count": total_count,
+            "offset": offset,
+            "limit": limit,
+            # O2: every capped listing says whether the page cut something off.
+            "truncated": total_count > offset + len(layers),
+        }
 
     @command
     def remove_layer(self, layer_id, **kwargs):

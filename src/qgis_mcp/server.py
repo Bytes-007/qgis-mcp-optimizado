@@ -839,7 +839,8 @@ async def export_session(
     title="Get Layers",
     annotations=ToolAnnotations(readOnlyHint=True),
     description="List layers in the current project with IDs, names, types, visibility, and type-specific info. "
-    "Use limit/offset for pagination (max 100 per call). Response includes total_count.",
+    "Use limit/offset for pagination (max 100 per call). Response includes count, total_count "
+    "and truncated (true when the page left layers out).",
     structured_output=True,
 )
 async def get_layers(
