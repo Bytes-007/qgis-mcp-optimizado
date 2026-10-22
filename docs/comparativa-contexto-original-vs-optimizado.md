@@ -63,6 +63,10 @@ Qué se verificó:
   devuelve los mismos 12 resultados.
 - `execute_code` con salida enorme: bandera `stdout_truncated` correcta, se conserva la
   cabeza de la salida, y los resultados pequeños son idénticos.
+- `max_value_chars` (opt-in, nuevo): con valores normales la respuesta es idéntica a la
+  llamada sin el parámetro; con un valor forzado de 3.000 caracteres se recorta a 121
+  (`…[2900 chars omitted]`, `value_chars_clipped: true`), ahorrando ~2.875 bytes por
+  feature sin tocar números ni geometría. El upstream rechaza el parámetro.
 - `get_message_log` / `get_layer_info`: mismas claves y mismos nombres de campos.
 
 Única diferencia ambiental (no causada por el fork): el perfil "QGIS normal" tiene el
