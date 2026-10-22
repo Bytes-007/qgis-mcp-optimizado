@@ -1931,14 +1931,20 @@ async def render_map(
     annotations=ToolAnnotations(destructiveHint=True),
     description="Execute arbitrary PyQGIS code. Use for operations not covered by other tools. "
     "Has access to QgsProject, iface, and core QGIS classes. Returns stdout/stderr and elapsed "
-    "seconds. timeout: seconds before the script is cancelled (default 55); a script that runs "
+    "seconds. Output is capped at 8000 chars per stream and the traceback at 8000 (tail kept), "
+    "with *_truncated and *_total_chars flags saying what was cut; max_output raises the cap up "
+    "to 50000. timeout: seconds before the script is cancelled (default 55); a script that runs "
     "past it comes back with timed_out=True and the output printed so far, and its side effects "
     "stand. Raise timeout or split bulk work into several calls; QGIS is unresponsive while a "
     "script runs. A single blocking call (time.sleep, GDAL) cannot be interrupted before it returns. "
     "A script that raises or times out is a tool error carrying the traceback and output so far.",
 )
 async def execute_code(
-    ctx: Context, code: str, timeout: int | None = None, instance: str | None = None
+    ctx: Context,
+    code: str,
+    timeout: int | None = None,
+    max_output: int | None = None,
+    instance: str | None = None,
 ) -> dict:
     if not await _confirm_destructive(
         ctx, "Execute arbitrary PyQGIS code? This can modify your project and system."
@@ -1947,6 +1953,8 @@ async def execute_code(
     await ctx.info("Executing PyQGIS code...")
     await ctx.report_progress(0, 100)
     params: dict[str, Any] = {"code": code}
+    if max_output is not None:
+        params["max_output"] = max_output
     # Same ordering as execute_processing: the plugin's deadline comes first so
     # the caller gets a message and the partial output instead of a client
     # timeout while QGIS keeps running the script (#43).
@@ -3226,13 +3234,18 @@ if _tool_mode == "compound":
     logger.info(f"Compound tool mode: {len(mcp._tool_manager._tools)} tools registered")
 
 
-def _strip_schema_titles() -> None:
+def _strip_schema_titles(server) -> None:
     """Drop redundant auto-generated 'title' keys from tool input schemas.
 
     Pydantic adds a display 'title' to the schema and every property (e.g. the
     param ``layer_id`` gets ``"title": "Layer Id"``) that just restates the name.
     It is sent to the client on every turn but carries no information, so removing
     it trims ~2k tokens off the granular tool schema with no behavior change.
+
+    *server* is a parameter rather than the module-level ``mcp`` so the budget
+    test can measure a freshly built server (e.g. compound tools registered on a
+    clean ``FastMCP``) exactly as a client would see it. Without it the test
+    measured the raw pydantic schemas: 1.835 chars more (~6,5%) for compound.
     """
 
     def clean(node: object) -> None:
@@ -3248,11 +3261,11 @@ def _strip_schema_titles() -> None:
                 for sub in node.get(key, []):
                     clean(sub)
 
-    for tool in mcp._tool_manager._tools.values():
+    for tool in server._tool_manager._tools.values():
         clean(tool.parameters)
 
 
-def _strip_instance_param() -> None:
+def _strip_instance_param(server) -> None:
     """Drop the ``instance`` property from tool schemas when only one exists.
 
     With a single instance there is nothing to route, so advertising ``instance``
@@ -3263,6 +3276,8 @@ def _strip_instance_param() -> None:
     shrinks. Restored as soon as a second instance is configured.
 
     Same mechanism as _strip_schema_titles() above, and applied after it.
+    Takes the server for the same reason: the budget test measures a server it
+    built itself, not only the one this module registers.
     """
     try:
         if len(get_instances()) > 1:
@@ -3272,14 +3287,14 @@ def _strip_instance_param() -> None:
         # lifespan handler - don't decide anything here.
         return
 
-    for tool in mcp._tool_manager._tools.values():
+    for tool in server._tool_manager._tools.values():
         properties = tool.parameters.get("properties")
         if properties:
             properties.pop("instance", None)
 
 
-_strip_schema_titles()
-_strip_instance_param()
+_strip_schema_titles(mcp)
+_strip_instance_param(mcp)
 
 
 # ===========================================================================

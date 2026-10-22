@@ -51,12 +51,28 @@ def code_failure_message(result: dict) -> str | None:
     """
     if result.get("executed", True):
         return None
-    parts = [
-        f"Code failed after {result.get('elapsed', '?')}s: {result.get('error', 'unknown error')}"
-    ]
+    error = result.get("error", "unknown error")
+    traceback_text = (result.get("traceback") or "").rstrip()
+    summary = f"Code failed after {result.get('elapsed', '?')}s"
+    # A traceback ends with the exception line, so adding `error` next to it says
+    # the same thing twice. Keep it only when it is not already there (no
+    # traceback, or an error clipped before it reached the traceback's tail).
+    if not traceback_text or error not in traceback_text:
+        summary = f"{summary}: {error}"
+    parts = [summary]
     for key in ("traceback", "stdout", "stderr"):
         if result.get(key):
             parts.append(f"{key}:\n{result[key].rstrip()}")
+    clipped = [
+        key
+        for key in ("traceback_truncated", "stdout_truncated", "stderr_truncated")
+        if result.get(key)
+    ]
+    if clipped:
+        parts.append(
+            f"Output was truncated ({', '.join(clipped)}); "
+            "raise max_output or write the rest to a file."
+        )
     if not result.get("timed_out"):
         parts.append("Changes the script made before it failed are kept.")
     return "\n\n".join(parts)

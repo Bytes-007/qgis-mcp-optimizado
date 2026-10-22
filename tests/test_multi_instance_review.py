@@ -50,7 +50,7 @@ def test_strip_instance_param_is_a_no_op_with_several_instances():
     properties["instance"] = {"type": "string"}
     try:
         with patch.dict(os.environ, {"QGIS_MCP_INSTANCES": "a=9876,b=9877"}, clear=True):
-            srv._strip_instance_param()
+            srv._strip_instance_param(srv.mcp)
         assert "instance" in tool.parameters["properties"]
     finally:
         tool.parameters["properties"].pop("instance", None)

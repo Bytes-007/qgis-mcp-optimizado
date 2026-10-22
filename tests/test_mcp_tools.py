@@ -179,6 +179,37 @@ async def test_execute_code_tool(mock_connection):
 
 
 @pytest.mark.asyncio
+async def test_execute_code_forwards_max_output(mock_connection):
+    """The output cap is the plugin's; the tool only carries the caller's number."""
+    mock_connection.returns({"executed": True, "stdout": "ok"})
+
+    await srv.execute_code(make_ctx(), code="print('ok')", max_output=20000)
+
+    mock_connection.send_command.assert_called_once_with(
+        "execute_code", {"code": "print('ok')", "max_output": 20000}, timeout=60
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_code_mentions_truncated_output(mock_connection):
+    """A clipped stream must not look like the whole stream in the error text."""
+    mock_connection.returns(
+        {
+            "executed": False,
+            "error": "boom",
+            "traceback": "Traceback ...\nValueError: boom\n",
+            "stdout": "…[truncated: 990 of 1000 chars omitted]…",
+            "stdout_truncated": True,
+            "elapsed": 0.1,
+        }
+    )
+    with pytest.raises(ToolError) as exc:
+        await srv.execute_code(make_ctx(), code="print('x' * 1000); raise ValueError('boom')")
+
+    assert "Output was truncated (stdout_truncated)" in str(exc.value)
+
+
+@pytest.mark.asyncio
 async def test_execute_code_timeout_keeps_the_plugin_deadline_first(mock_connection):
     """#43: like execute_processing, the plugin must give up 5s before the socket does."""
     mock_connection.returns({"executed": True})
@@ -210,7 +241,10 @@ async def test_execute_code_script_that_raises_is_a_tool_error(mock_connection):
     with pytest.raises(ToolError) as exc:
         await srv.execute_code(make_ctx(), code="print('before'); 1/0")
     message = str(exc.value)
-    assert "Code failed after 0.01s: division by zero" in message
+    assert "Code failed after 0.01s" in message
+    # The traceback's last line is the exception itself, so the summary no longer
+    # repeats it: it used to appear twice in the same message.
+    assert message.count("division by zero") == 1
     assert "ZeroDivisionError" in message
     assert "stdout:\nbefore" in message
     assert "stderr:" not in message

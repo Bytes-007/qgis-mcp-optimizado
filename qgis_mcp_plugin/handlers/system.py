@@ -33,6 +33,28 @@ from ..constants import plugin_version
 from ..errors import CommandError
 from ..registry import command
 
+# Everything execute_code prints reaches the client's context, so it is capped:
+# one `print()` inside a loop - or the repr() of a big layer - otherwise puts
+# megabytes into a conversation nobody can read back. Reported output keeps a
+# head and a tail; a traceback keeps its tail, because the exception is last.
+_MAX_OUTPUT_CHARS = 8000
+_MAX_OUTPUT_CHARS_CAP = 50000
+_MAX_TRACEBACK_CHARS = 8000
+_MAX_ERROR_CHARS = 2000
+
+
+def _clip(text, limit, keep_tail=0):
+    """``(text, truncated, total_chars)`` with the middle dropped when too long."""
+    total = len(text)
+    if limit is None or total <= limit:
+        return text, False, total
+    limit = max(int(limit), 0)
+    truncated = total - limit
+    marker = f"\n…[truncated: {truncated} of {total} chars omitted]…\n"
+    if keep_tail and limit > keep_tail:
+        return text[: limit - keep_tail] + marker + text[-keep_tail:], True, total
+    return text[:limit] + marker, True, total
+
 
 class _CodeDeadline(Exception):
     """Raised by the execute_code trace function once the budget is spent."""
@@ -165,9 +187,19 @@ class SystemHandlers:
         return info
 
     @command
-    def execute_code(self, code, timeout=None, **kwargs):
+    def execute_code(self, code, timeout=None, max_output=None, **kwargs):
         QgsMessageLog.logMessage(f"Executing code ({len(code)} chars)", self.LOG_TAG, MSG_INFO)
         budget = self._CODE_TIMEOUT if timeout is None else float(timeout)
+        limit = _MAX_OUTPUT_CHARS if max_output is None else int(max_output)
+        if limit <= 0:
+            raise CommandError("max_output must be positive")
+        if limit > _MAX_OUTPUT_CHARS_CAP:
+            # Refused rather than clamped, like get_layer_features' limit: a
+            # caller that asked for more and got less reads the short output as
+            # the whole output.
+            raise CommandError(
+                f"max_output {limit} exceeds the maximum of {_MAX_OUTPUT_CHARS_CAP}"
+            )
         started = time.monotonic()
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
@@ -176,8 +208,15 @@ class SystemHandlers:
         previous_trace = sys.gettrace()
 
         def output(**fields):
-            fields["stdout"] = stdout_capture.getvalue()
-            fields["stderr"] = stderr_capture.getvalue()
+            # A quarter of the stream budget is tail: in a long loop the last
+            # line is usually the state it ended in, and the head is the first.
+            keep_tail = min(2000, limit // 4)
+            for stream, capture in (("stdout", stdout_capture), ("stderr", stderr_capture)):
+                text, truncated, total = _clip(capture.getvalue(), limit, keep_tail=keep_tail)
+                fields[stream] = text
+                if truncated:
+                    fields[stream + "_truncated"] = True
+                    fields[stream + "_total_chars"] = total
             fields["elapsed"] = round(time.monotonic() - started, 2)
             return fields
 
@@ -212,7 +251,22 @@ class SystemHandlers:
                 ),
             )
         except Exception as e:
-            return output(executed=False, error=str(e), traceback=traceback.format_exc())
+            # The traceback is clipped from the tail: its last line names the
+            # exception, and a deep one otherwise arrives megabytes long.
+            fields = {"executed": False}
+            error_text, error_truncated, error_total = _clip(str(e), _MAX_ERROR_CHARS)
+            fields["error"] = error_text
+            if error_truncated:
+                fields["error_truncated"] = True
+                fields["error_total_chars"] = error_total
+            tb_text, tb_truncated, tb_total = _clip(
+                traceback.format_exc(), _MAX_TRACEBACK_CHARS, keep_tail=6000
+            )
+            fields["traceback"] = tb_text
+            if tb_truncated:
+                fields["traceback_truncated"] = True
+                fields["traceback_total_chars"] = tb_total
+            return output(**fields)
         finally:
             sys.stdout = original_stdout
             sys.stderr = original_stderr

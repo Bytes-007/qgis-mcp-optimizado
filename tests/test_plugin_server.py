@@ -151,3 +151,73 @@ def test_convert_attribute_turns_qt_dates_into_iso_strings(server):
     assert server._convert_attribute(FakeQDateTime()) == "2021-03-04T05:06:07"
     assert server._convert_attribute(datetime.date(2020, 1, 2)) == "2020-01-02"
     assert server._convert_attribute(3.5) == 3.5
+
+
+# --- execute_code output caps ---
+
+
+def _run_code(server, **params):
+    return server._dispatch({"type": "execute_code", "params": params})
+
+
+def test_execute_code_clips_a_huge_stdout(server):
+    """A runaway print must not put a megabyte into the conversation."""
+    response = _run_code(server, code="print('x' * 1000000)")
+
+    result = response["result"]
+    assert result["executed"] is True
+    assert result["stdout_truncated"] is True
+    assert result["stdout_total_chars"] == 1000001
+    assert len(result["stdout"]) < 8300, "head + marker + tail, not the whole stream"
+    assert "x" * 100 in result["stdout"]
+
+
+def test_execute_code_keeps_the_end_of_a_long_stream(server):
+    """The last line of a long loop is the state it ended in."""
+    stdout = _run_code(server, code="print('START'); print('x' * 20000); print('END')")["result"][
+        "stdout"
+    ]
+
+    assert stdout.startswith("START")
+    assert stdout.rstrip().endswith("END")
+
+
+def test_execute_code_keeps_the_last_line_of_a_long_traceback(server):
+    """A deep traceback is clipped from the tail: the exception is last.
+
+    A chain of distinct functions, not one recursive one: Python collapses
+    repeated frames into "[Previous line repeated N more times]", which stays
+    short enough that nothing would be clipped.
+    """
+    code = "def f0():\n    raise ValueError('deep boom')\n" + "".join(
+        f"def f{i}():\n    return f{i - 1}()\n" for i in range(1, 200)
+    )
+    code += "f199()\n"
+    result = _run_code(server, code=code)["result"]
+
+    assert result["executed"] is False
+    assert result["traceback_truncated"] is True
+    assert result["traceback"].rstrip().endswith("ValueError: deep boom")
+
+
+def test_execute_code_refuses_a_max_output_over_the_cap(server):
+    """Refused, not clamped: a shortened output reads as the whole output."""
+    response = _run_code(server, code="print(1)", max_output=60000)
+
+    assert response["status"] == "error"
+    assert "exceeds the maximum of 50000" in response["message"]
+
+
+def test_execute_code_max_output_raises_the_cap(server):
+    result = _run_code(server, code="print('x' * 19990)", max_output=20000)["result"]
+
+    assert "stdout_truncated" not in result
+    assert len(result["stdout"]) == 19991
+
+
+def test_execute_code_small_output_is_untouched(server):
+    result = _run_code(server, code="print('hello')")["result"]
+
+    assert result["stdout"] == "hello\n"
+    assert "stdout_truncated" not in result
+    assert "stdout_total_chars" not in result

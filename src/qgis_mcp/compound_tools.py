@@ -1116,6 +1116,8 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
         await ctx.info("Executing PyQGIS code...")
         await ctx.report_progress(0, 100)
         payload = {"code": kwargs["code"]}
+        if kwargs.get("max_output") is not None:
+            payload["max_output"] = kwargs["max_output"]
         socket_timeout = with_timeout(payload, kwargs)
         result = await _send("execute_code", payload, timeout=socket_timeout)
         await ctx.report_progress(100, 100)
@@ -1131,8 +1133,10 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
             "Execute arbitrary PyQGIS code.\n"
             "Actions: execute\n"
             "- execute: code (str), timeout (int, optional, seconds before the script is cancelled, "
-            "default 55); a script that raises or times out is a tool error with the traceback and "
-            "output so far - destructive, requires confirmation"
+            "default 55), max_output (int, optional, chars per stream, default 8000, max 50000); "
+            "output over the cap is truncated with *_truncated flags; a script that raises or "
+            "times out is a tool error with the traceback and output so far - destructive, "
+            "requires confirmation"
             f"{_PARAMS_NOTE}"
         ),
         annotations=ToolAnnotations(destructiveHint=True),
