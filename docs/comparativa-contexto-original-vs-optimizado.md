@@ -1,4 +1,14 @@
-# Benchmark de consumo de contexto: plugin original vs optimizado
+# Cutting MCP context cost ~99% with zero data loss (measured A/B benchmark)
+
+> **TL;DR for the maintainer:** the plugin's biggest context hogs are two single calls —
+> `list_processing_algorithms` (~16.5k tokens) and `execute_code` dumping stdout (~250k tokens
+> for a 1 MB print). Capping them, adding opt-in field projection and a `max_value_chars`
+> clip cuts those to ~50 / ~2,000 / ~200 tokens **while a 21/21 A/B suite verifies the
+> returned content is identical to upstream**. New params are opt-in; default behavior
+> is byte-identical (only additive keys when a cap actually bites). Reproduce with
+> `uv run --no-sync benchmarks/{context_bench,quality_ab}.py`.
+
+Comparativa medida: plugin original vs optimizado
 
 **Fecha:** 2026-10-22 · **Entorno:** QGIS 3.44 LTR con el mismo proyecto abierto en dos instancias.
 
