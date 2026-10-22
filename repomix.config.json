@@ -1,0 +1,71 @@
+{
+    "$schema": "https://repomix.com/schemas/latest/schema.json",
+    "input": {
+        "maxFileSize": 52428800
+    },
+    "output": {
+        "filePath": "repomix-output.md",
+        "style": "markdown",
+        "filePathStyle": "target-relative",
+        "parsableStyle": false,
+        "fileSummary": true,
+        "directoryStructure": true,
+        "files": true,
+        "removeComments": true,
+        "removeEmptyLines": true,
+        "compress": true,
+        "patterns": [
+            { "pattern": "tests/**", "directoryStructureOnly": true },
+            { "pattern": "docs/**", "directoryStructureOnly": true },
+            { "pattern": "**/*.md", "compress": false }
+        ],
+        "topFilesLength": 5,
+        "showLineNumbers": false,
+        "truncateBase64": true,
+        "copyToClipboard": false,
+        "includeFullDirectoryStructure": false,
+        "tokenCountTree": true,
+        "git": {
+            "sortByChanges": true,
+            "sortByChangesMaxCommits": 100,
+            "includeDiffs": false,
+            "includeLogs": false,
+            "includeLogsCount": 50
+        }
+    },
+    "include": [
+        "src/**/*.py",
+        "qgis_mcp_plugin/**/*.py",
+        "benchmarks/*.py",
+        "docs/comparativa-contexto-original-vs-optimizado.md",
+        "README.md",
+        "AGENTS.md",
+        "qgis_mcp_plugin/AGENTS.md",
+        "pyproject.toml",
+        "install.py"
+    ],
+    "ignore": {
+        "useGitignore": true,
+        "useDotIgnore": true,
+        "useDefaultPatterns": true,
+        "customPatterns": [
+            "tests/**",
+            "test-results/**",
+            "debug-out/**",
+            "Pantallas inspiacion/**",
+            ".Plan/**",
+            ".venv/**",
+            "__pycache__/**",
+            "*.lock",
+            "repomix-output.*",
+            "docs/inspiracion.html",
+            "docs/.inspiracion.body.txt"
+        ]
+    },
+    "security": {
+        "enableSecurityCheck": true
+    },
+    "tokenCount": {
+        "encoding": "o200k_base"
+    }
+}
