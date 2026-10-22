@@ -29,12 +29,13 @@ Reproducible con: `uv run --no-sync benchmarks/context_bench.py` (con los dos QG
 
 | Llamada | Original | Optimizado | Nota |
 |---|---:|---:|---|
-| `get_layers` (limit 3) | 558 | 589 | equivalente |
-| `get_layer_features` (3 feats, todos los campos) | 357 | 357 | equivalente |
-| `get_layer_features` + `fields=['region','area_ha']` | **error** (parámetro no aceptado) | 158 | función nueva: el original ni siquiera la acepta |
 | `list_processing_algorithms` () | **66,706** | **213** | el original vuelca 759 algoritmos; el optimizado devuelve resumen + paginación |
 | `execute_code` imprimiendo ~1 MB | **1,000,064** | **8,180** | stdout truncado con `stdout_truncated` + `stdout_total_chars` |
+| `get_layer_features` + `fields=['region','area_ha']` | **error** (parámetro no aceptado) | 158 | función nueva: el original ni siquiera la acepta |
+| `get_layer_features` celda de 3.000 chars + `max_value_chars=100` | ~3,077/feature | ~202/feature | opt-in: `…[2900 chars omitted]` + `value_chars_clipped` |
 | `execute_code` con traceback | 477 | 410 | el optimizado evita duplicar la excepción |
+| `get_layers` (limit 3) | 558 | 589 | equivalente (+ paginación) |
+| `get_layer_features` (3 feats, todos los campos) | 357 | 357 | **byte-idéntico** |
 
 ## Estimación de tokens (÷4, aproximación sin tokenizer)
 
