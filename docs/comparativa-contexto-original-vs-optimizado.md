@@ -84,6 +84,12 @@ Qué se verificó:
 plugin externo QuickOSM instalado (12 algoritmos más). El fork no oculta ni altera
 ningún algoritmo de los proveedores que ambos comparten.
 
+Nota sobre resultados grandes (>20 features): al nivel del servidor MCP, el fork
+corrige un bug de upstream — cuando los features se cachéan como recurso
+(`features_resource`), ya no permanecen *también* en la respuesta (pagaban el
+contexto dos veces). Esta corrección no se ve en la batería: la cliente raw
+(`client.py`) nunca pasa por esa capa; la comparación A/B mide el nivel plugin.
+
 ## Por qué importa
 
 La`list_processing_algorithms` sin tope y el `execute_code` sin recorte son las dos vías por
