@@ -289,3 +289,17 @@ async def test_compound_accepts_every_documented_param():
             checked += send.called
     assert refused == []
     assert checked > 100, "most actions must reach _send, or this test checks nothing"
+
+
+@pytest.mark.asyncio
+async def test_compound_features_get_forwards_the_projection():
+    """fields= must reach the plugin through the compound group too."""
+    send = AsyncMock(return_value={"features": [], "fields": ["a"]})
+    mcp = FastMCP("compound-fields-test")
+    register_compound_tools(mcp, _send=send, _confirm_destructive=AsyncMock(return_value=True))
+
+    await mcp.call_tool("features", {"action": "get", "params": {"layer_id": "l", "fields": ["a"]}})
+
+    cmd, params = send.call_args[0][:2]
+    assert cmd == "get_layer_features"
+    assert params["fields"] == ["a"]

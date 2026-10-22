@@ -114,23 +114,57 @@ class FeatureHandlers:
 
     @command
     def get_layer_features(
-        self, layer_id, limit=10, offset=0, expression=None, include_geometry=False, **kwargs
+        self,
+        layer_id,
+        limit=10,
+        offset=0,
+        expression=None,
+        include_geometry=False,
+        fields=None,
+        **kwargs,
     ):
         layer = self._get_vector_layer(layer_id)
 
-        field_names = [field.name() for field in layer.fields()]
+        all_fields = [field.name() for field in layer.fields()]
         feature_count = layer.featureCount()
 
+        # Attribute projection: reading 3 of 40 columns and paying for all 40 is
+        # the largest recurring cost of this tool on a wide layer. Layer order
+        # is kept, so the same set of columns always comes back the same way.
+        returned = all_fields
+        if fields is not None:
+            if isinstance(fields, str):
+                fields = [fields]
+            wanted = list(fields)
+            if not wanted:
+                raise CommandError("fields must not be empty; omit it to return every field")
+            missing = [name for name in wanted if name not in all_fields]
+            if missing:
+                raise CommandError(
+                    f"Unknown field(s): {', '.join(missing)}; available: {', '.join(all_fields)}"
+                )
+            returned = [name for name in all_fields if name in set(wanted)]
+
         request = QgsFeatureRequest()
+        requested = list(returned)
         matched = feature_count
         if expression:
             self._check_filter_expression(layer, expression)
             request.setFilterExpression(expression)
+            # The filter is evaluated against the data source, where a column
+            # missing from the subset may not exist: fetch what the expression
+            # reads alongside the returned columns, then drop it from the answer.
+            for name in sorted(QgsExpression(expression).referencedColumns()):
+                if name in all_fields and name not in requested:
+                    requested.append(name)
             # featureCount() is the whole layer. Report what the expression
             # selects too, since that is what limit and offset page through.
             counter = QgsFeatureRequest().setFilterExpression(expression)
             counter.setNoAttributes()
             matched = sum(1 for _ in layer.getFeatures(counter))
+
+        if requested != all_fields:
+            request.setSubsetOfAttributes([layer.fields().indexOf(name) for name in requested])
 
         # Decimals for point WKT: 3 is a millimetre in metres but ~55 m in
         # degrees, so geographic coordinates keep 7 (~1 cm).
@@ -146,8 +180,8 @@ class FeatureHandlers:
 
             # Phase 1C: Flatten to {"_fid": id, ...attrs} instead of nested "attributes"
             feature_obj = {"_fid": feature.id()}
-            for field in layer.fields():
-                feature_obj[field.name()] = self._convert_attribute(feature.attribute(field.name()))
+            for name in returned:
+                feature_obj[name] = self._convert_attribute(feature.attribute(name))
 
             if include_geometry and feature.hasGeometry():
                 geom = feature.geometry()
@@ -187,7 +221,8 @@ class FeatureHandlers:
             "feature_count": feature_count,
             # Features the expression selects (the layer total when there is none).
             "matched": matched,
-            "fields": field_names,
+            # The columns actually returned (the projection, when there is one).
+            "fields": returned,
             "features": features,
             # What coordinates in _geometry are in.
             "crs": layer.crs().authid(),

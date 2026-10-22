@@ -693,3 +693,81 @@ def test_long_distinct_values_are_clipped(server, layer):
 
     assert stats["distinct_values"] == ["d" * 80 + "…"]
     assert stats["distinct_values_clipped"] is True
+
+
+# --- attribute projection (fields=) ---
+
+
+class FakeFields:
+    """Just enough of QgsFields: names in layer order, iterable and indexOf."""
+
+    def __init__(self, names):
+        self._names = list(names)
+
+    def __iter__(self):
+        for name in self._names:
+            field = MagicMock()
+            field.name.return_value = name
+            yield field
+
+    def indexOf(self, name):
+        return self._names.index(name) if name in self._names else -1
+
+
+class OneFeature:
+    def __init__(self, fid, values):
+        self._fid = fid
+        self._values = values
+
+    def id(self):
+        return self._fid
+
+    def attribute(self, name):
+        return self._values.get(name)
+
+    def hasGeometry(self):
+        return False
+
+
+def test_fields_returns_only_the_projected_columns(server, layer, features):
+    layer.fields.return_value = FakeFields(["a", "b", "c"])
+    layer.featureCount.return_value = 1
+    layer.getFeatures.return_value = [OneFeature(7, {"a": "x", "b": "y", "c": "z"})]
+
+    result = server.get_layer_features("lid", fields=["c", "a"])
+
+    assert result["fields"] == ["a", "c"], "layer order, not the caller's order"
+    assert result["features"] == [{"_fid": 7, "a": "x", "c": "z"}]
+    features.QgsFeatureRequest.return_value.setSubsetOfAttributes.assert_called_once_with([0, 2])
+
+
+def test_unknown_fields_are_refused_with_the_available_ones(server, layer, plugin_handlers):
+    layer.fields.return_value = FakeFields(["a", "b"])
+
+    with pytest.raises(plugin_handlers.base.CommandError, match="Unknown field") as exc:
+        server.get_layer_features("lid", fields=["a", "nope"])
+
+    assert "nope" in str(exc.value)
+    assert "available: a, b" in str(exc.value)
+
+
+def test_expression_columns_are_fetched_but_not_returned(server, layer, features, monkeypatch):
+    """A filter on a column outside the projection must still be evaluated."""
+
+    class ProjectionExpression:
+        def __init__(self, text):
+            self.text = text
+
+        def referencedColumns(self):
+            return {"b"}
+
+    monkeypatch.setattr(features, "QgsExpression", ProjectionExpression)
+    layer.fields.return_value = FakeFields(["a", "b", "c"])
+    layer.featureCount.return_value = 1
+    layer.getFeatures.return_value = [OneFeature(1, {"a": "x", "b": 9})]
+
+    result = server.get_layer_features("lid", fields=["a"], expression='"b" > 5')
+
+    features.QgsFeatureRequest.return_value.setSubsetOfAttributes.assert_called_once_with([0, 1])
+    assert result["fields"] == ["a"]
+    assert result["features"] == [{"_fid": 1, "a": "x"}]

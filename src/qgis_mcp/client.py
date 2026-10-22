@@ -226,7 +226,7 @@ class QgisMCPClient:
         return self.send_command("zoom_to_layer", {"layer_id": layer_id})
 
     def get_layer_features(
-        self, layer_id, limit=10, offset=0, expression=None, include_geometry=False
+        self, layer_id, limit=10, offset=0, expression=None, include_geometry=False, fields=None
     ):
         params = {
             "layer_id": layer_id,
@@ -236,6 +236,8 @@ class QgisMCPClient:
         }
         if expression:
             params["expression"] = expression
+        if fields is not None:
+            params["fields"] = fields
         return self.send_command("get_layer_features", params)
 
     def get_field_statistics(self, layer_id, field_name):

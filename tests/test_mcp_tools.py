@@ -1445,3 +1445,24 @@ def test_resource_cache_evicts_oldest_past_the_cap():
     assert oldest not in srv._resource_cache
     assert newest in srv._resource_cache
     srv._resource_cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_layer_features_forwards_the_projection(mock_connection):
+    mock_connection.returns(
+        {"features": [], "fields": ["a", "b"], "feature_count": 1, "matched": 1, "crs": "EPSG:4326"}
+    )
+
+    await srv.get_layer_features(make_ctx(), layer_id="test", fields=["a", "b"])
+
+    mock_connection.send_command.assert_called_once_with(
+        "get_layer_features",
+        {
+            "layer_id": "test",
+            "limit": 10,
+            "offset": 0,
+            "include_geometry": False,
+            "fields": ["a", "b"],
+        },
+        timeout=30,
+    )

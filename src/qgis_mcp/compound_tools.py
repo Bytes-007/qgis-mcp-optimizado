@@ -456,6 +456,8 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
         }
         if "expression" in kwargs:
             payload["expression"] = kwargs["expression"]
+        if kwargs.get("fields") is not None:
+            payload["fields"] = kwargs["fields"]
         return await _send("get_layer_features", payload)
 
     async def features_delete(ctx, kwargs):
@@ -499,7 +501,8 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
             "Feature access and editing.\n"
             "Actions: get, get_statistics, add, update, update_geometry, delete\n"
             "- get: layer_id (str), limit (int, default 10, max 50), offset (int, default 0), "
-            "expression (str, optional), include_geometry (bool, default false)\n"
+            "expression (str, optional), fields (list[str], optional - columns to return, "
+            "default all), include_geometry (bool, default false)\n"
             "- get_statistics: layer_id (str), field_name (str)\n"
             "- add: layer_id (str), features (list[dict]), crs (str, optional - of "
             "geometry_wkt, default the layer CRS) - destructive\n"

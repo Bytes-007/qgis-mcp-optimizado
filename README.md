@@ -354,7 +354,28 @@ QGIS_MCP_TOOL_MODE=compound uv run --no-sync src/qgis_mcp/server.py
 
 Omit `params` for actions that take none (`{"action": "ping"}`).
 
-Groups: `system`, `project`, `layer`, `features`, `selection`, `style`, `canvas`, `render`, `processing`, `code`, `batch`, `layer_tree`, `plugins`, `variables`, `settings`, `expression`, `query`, `transform`, `message_log`, `layer_property`, `field`, `analysis`, `bookmarks`, `map_themes`, `active_layer`.
+Groups: `system`, `project`, `layer`, `features`, `selection`, `editing`, `connection`, `style`, `canvas`, `render`, `processing`, `code`, `batch`, `layer_tree`, `plugins`, `variables`, `settings`, `expression`, `query`, `transform`, `message_log`, `layer_property`, `field`, `analysis`, `bookmarks`, `map_themes`, `active_layer`.
+
+What compound mode buys and what it costs, measured on v0.15.2 (the tool
+listing is 125 tools / 52.8k chars of description and schema):
+
+- with the pydantic titles stripped it is 27 tools / 28.2k chars, a 47% cut. The trade-offs are that every call loses `instance=` (and the server refuses to start with more than one configured instance), parameters become an untyped `params` object, and annotations are per group - `layer` and `features` are `destructive` for their read-only actions too.
+
+### Tool profiles
+
+`QGIS_MCP_TOOL_PROFILE` keeps a subset of the granular tools, with none of compound mode's trade-offs (typed parameters, `instance=`, per-tool annotations):
+
+```bash
+QGIS_MCP_TOOL_PROFILE=read-only uv run --no-sync src/qgis_mcp/server.py
+```
+
+| Profile | Tools | Listing | For |
+|---|---|---|---|
+| `all` (default) | 125 | 52.8k chars | everything |
+| `read-only` | 44 | 16.1k chars | an agent that only inspects a project |
+| `core` | 24 | 9.7k chars | read, run Processing, render, `execute_code` |
+
+Profiles apply to granular mode; combining one with `QGIS_MCP_TOOL_MODE=compound` is refused rather than silently ignored.
 
 ## Configuration
 
@@ -368,6 +389,7 @@ Groups: `system`, `project`, `layer`, `features`, `selection`, `style`, `canvas`
 | `QGIS_MCP_LOG_FILE` | `~/.local/share/qgis-mcp/server.log` | Log file path (empty to disable) |
 | `QGIS_MCP_LOG_LEVEL` | `INFO` | File log level |
 | `QGIS_MCP_TOOL_MODE` | `granular` | `granular` (125 tools) or `compound` (27 grouped) |
+| `QGIS_MCP_TOOL_PROFILE` | `all` | `all`, `read-only` (44 tools) or `core` (24): a subset of the granular tools, keeping typed parameters and annotations |
 | `QGIS_MCP_AUTO_CONFIRM` | on | Confirmation elicitation on destructive tools (`execute_code`, `remove_layer`, `delete_features`, ...) is skipped by default: your client already asks before running them, so it was a second prompt for the same call. Set to `0`/`false`/`no`/`off` to elicit anyway - worth it only for a client that runs tools unattended. |
 
 ### Authentication

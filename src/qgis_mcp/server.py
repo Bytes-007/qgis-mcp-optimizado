@@ -970,8 +970,9 @@ async def zoom_to_layer(ctx: Context, layer_id: str, instance: str | None = None
     description="Get features from a vector layer. Flat dicts: _fid + attributes at top level. "
     "expression filter (QGIS, e.g. "
     '"name = \'Berlin\'", "population > 1000000"), limit (max 50, larger is refused; default 10), offset for paging, '
-    "optional geometry in _geometry key. feature_count is the layer total; matched is the "
-    "count after the expression filter.",
+    "fields to return only the columns you need (default all), optional geometry in "
+    "_geometry key. feature_count is the layer total; matched is the count after the "
+    "expression filter.",
     structured_output=True,
 )
 async def get_layer_features(
@@ -981,6 +982,7 @@ async def get_layer_features(
     offset: int = 0,
     expression: str | None = None,
     include_geometry: bool = False,
+    fields: list[str] | None = None,
     instance: str | None = None,
 ) -> dict[str, Any]:
     if refusal := feature_limit_error(limit):
@@ -993,6 +995,8 @@ async def get_layer_features(
     }
     if expression:
         params["expression"] = expression
+    if fields is not None:
+        params["fields"] = fields
     result = await _send("get_layer_features", params, instance=instance)
 
     # Large Results to Resources (Task 9). Keyed off what came back, not what was
@@ -3237,6 +3241,77 @@ if _tool_mode == "compound":
     mcp._tool_manager._tools.clear()
     register_compound_tools(mcp, _send, _confirm_destructive)
     logger.info(f"Compound tool mode: {len(mcp._tool_manager._tools)} tools registered")
+
+
+# Tool profiles (opt-in via QGIS_MCP_TOOL_PROFILE): cut the granular surface
+# down to what the client needs. Unlike compound mode a profile keeps typed
+# parameters, per-tool annotations and instance=, so it is the cheaper cut when
+# the whole surface is not needed - the embedded chat reads more than it edits,
+# and a read-only agent has no business seeing 18 destructive tools.
+_PROFILE = os.environ.get("QGIS_MCP_TOOL_PROFILE", "all")
+_TOOL_PROFILES = ("all", "read-only", "core")
+_CORE_TOOLS = frozenset(
+    {
+        "ping",
+        "diagnose",
+        "get_qgis_info",
+        "get_project_info",
+        "get_layers",
+        "get_raster_info",
+        "find_layer",
+        "get_layer_features",
+        "get_field_statistics",
+        "add_vector_layer",
+        "add_raster_layer",
+        "remove_layer",
+        "set_layer_visibility",
+        "list_processing_algorithms",
+        "get_algorithm_help",
+        "execute_processing",
+        "start_processing_job",
+        "get_processing_job",
+        "cancel_processing_job",
+        "get_canvas_extent",
+        "set_canvas_extent",
+        "render_map",
+        "get_canvas_screenshot",
+        "execute_code",
+    }
+)
+
+if _PROFILE not in _TOOL_PROFILES:
+    raise SystemExit(
+        f"QGIS_MCP_TOOL_PROFILE={_PROFILE!r} is not one of {', '.join(_TOOL_PROFILES)}"
+    )
+
+if _PROFILE != "all":
+    if _tool_mode == "compound":
+        # Silently ignoring a configured profile would advertise tools the user
+        # meant to hide.
+        raise SystemExit(
+            "QGIS_MCP_TOOL_PROFILE applies to granular mode; compound mode registers "
+            "27 grouped tools. Unset one of QGIS_MCP_TOOL_MODE / QGIS_MCP_TOOL_PROFILE."
+        )
+    _tools = mcp._tool_manager._tools
+    if _PROFILE == "read-only":
+        _keep = {
+            name
+            for name, tool in _tools.items()
+            if tool.annotations and tool.annotations.readOnlyHint
+        }
+    else:
+        _unknown = sorted(_CORE_TOOLS - set(_tools))
+        if _unknown:
+            # A typo in the list would otherwise hide nothing and read as a
+            # working profile.
+            raise SystemExit(f"QGIS_MCP_TOOL_PROFILE=core names unknown tools: {_unknown}")
+        _keep = set(_CORE_TOOLS)
+    if not _keep:
+        raise SystemExit(f"QGIS_MCP_TOOL_PROFILE={_PROFILE!r} kept no tools")
+    for _name in list(_tools):
+        if _name not in _keep:
+            del _tools[_name]
+    logger.info(f"Tool profile {_PROFILE}: {len(_tools)} tools registered")
 
 
 def _strip_schema_titles(server) -> None:
