@@ -34,13 +34,14 @@ from qgis_mcp.helpers import (
     make_render_response,
 )
 
-# Appended to every compound tool description so agents know where the
-# per-action parameters go (they are NOT top-level tool arguments).
-_PARAMS_NOTE = (
+# Full note moved to the server's instructions (once) instead of being
+# repeated in every compound tool description (saves ~4k chars of listing).
+_PARAMS_NOTE_FULL = (
     "\nAll action parameters go inside the `params` object, e.g. "
     '{"action": "load", "params": {"path": "/tmp/x.qgz"}}. '
     "Omit `params` for actions that take none."
 )
+_PARAMS_NOTE = ""
 
 # Map render-group layout actions to their underlying plugin commands.
 _LAYOUT_ITEM_COMMANDS = {
@@ -458,6 +459,8 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
             payload["expression"] = kwargs["expression"]
         if kwargs.get("fields") is not None:
             payload["fields"] = kwargs["fields"]
+        if kwargs.get("max_value_chars") is not None:
+            payload["max_value_chars"] = kwargs["max_value_chars"]
         return await _send("get_layer_features", payload)
 
     async def features_delete(ctx, kwargs):

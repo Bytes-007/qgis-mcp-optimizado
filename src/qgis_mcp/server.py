@@ -972,7 +972,8 @@ async def zoom_to_layer(ctx: Context, layer_id: str, instance: str | None = None
     "expression filter (QGIS, e.g. "
     '"name = \'Berlin\'", "population > 1000000"), limit (max 50, larger is refused; default 10), offset for paging, '
     "fields to return only the columns you need (default all), optional geometry in "
-    "_geometry key. feature_count is the layer total; matched is the count after the "
+    "_geometry. max_value_chars truncates long string values (opt-in; required when a "
+    "column may carry long text). feature_count is the layer total; matched is the count after the "
     "expression filter.",
     structured_output=True,
 )
@@ -984,6 +985,7 @@ async def get_layer_features(
     expression: str | None = None,
     include_geometry: bool = False,
     fields: list[str] | None = None,
+    max_value_chars: int | None = None,
     instance: str | None = None,
 ) -> dict[str, Any]:
     if refusal := feature_limit_error(limit):
@@ -998,6 +1000,8 @@ async def get_layer_features(
         params["expression"] = expression
     if fields is not None:
         params["fields"] = fields
+    if max_value_chars is not None:
+        params["max_value_chars"] = max_value_chars
     result = await _send("get_layer_features", params, instance=instance)
 
     # Large Results to Resources (Task 9). Keyed off what came back, not what was
@@ -3236,11 +3240,14 @@ if _tool_mode == "compound":
             "multi-instance setups, or configure a single instance."
         )
 
-    from qgis_mcp.compound_tools import register_compound_tools
+    from qgis_mcp.compound_tools import register_compound_tools, _PARAMS_NOTE_FULL
 
     # Replace granular tools with compound tools
     mcp._tool_manager._tools.clear()
     register_compound_tools(mcp, _send, _confirm_destructive)
+    # The params-format note lives once in the server instructions instead of
+    # being repeated in every compound tool description.
+    mcp._mcp_server.instructions = (mcp._mcp_server.instructions or "") + _PARAMS_NOTE_FULL
     logger.info(f"Compound tool mode: {len(mcp._tool_manager._tools)} tools registered")
 
 
