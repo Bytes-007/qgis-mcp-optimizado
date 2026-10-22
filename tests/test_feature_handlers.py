@@ -679,3 +679,17 @@ def test_add_features_without_crs_stores_the_wkt_as_given(adder):
 
     geom.transform.assert_not_called()
     assert "warnings" not in result
+
+
+def test_long_distinct_values_are_clipped(server, layer):
+    """A sample of distinct values is a hint; one long column was the payload."""
+    fields = layer.fields.return_value
+    fields.indexOf.return_value = 0
+    fields.at.return_value.isNumeric.return_value = False
+    long_value = "d" * 200
+    layer.aggregate.side_effect = [(1, True), ([long_value], True)]
+
+    stats = server.get_field_statistics("lid", "name")
+
+    assert stats["distinct_values"] == ["d" * 80 + "…"]
+    assert stats["distinct_values_clipped"] is True

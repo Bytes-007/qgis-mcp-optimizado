@@ -839,7 +839,7 @@ async def export_session(
     title="Get Layers",
     annotations=ToolAnnotations(readOnlyHint=True),
     description="List layers in the current project with IDs, names, types, visibility, and type-specific info. "
-    "Use limit/offset for pagination. Response includes total_count.",
+    "Use limit/offset for pagination (max 100 per call). Response includes total_count.",
     structured_output=True,
 )
 async def get_layers(
@@ -1520,16 +1520,20 @@ async def cancel_processing_job(ctx: Context, job_id: str, instance: str | None 
     title="List Processing Algorithms",
     annotations=ToolAnnotations(readOnlyHint=True),
     description="Search for processing algorithms by keyword and/or provider. "
-    "Returns id, name, provider for each match.",
+    "Returns id, name, provider for each match, paged with limit (default 50, max 100) and "
+    "offset. With no search and no provider it returns the provider names with their algorithm "
+    "counts, which is what says what to search for.",
     structured_output=True,
 )
 async def list_processing_algorithms(
     ctx: Context,
     search: str | None = None,
     provider: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
     instance: str | None = None,
 ) -> dict[str, Any]:
-    params = {}
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
     if search:
         params["search"] = search
     if provider:
@@ -2248,7 +2252,8 @@ async def export_layout(
     annotations=ToolAnnotations(readOnlyHint=True),
     description="Get QGIS message log entries. Filter by level ('info', 'warning', 'critical', "
     "'success', 'none') "
-    "and/or tag (e.g. 'QGIS MCP'). Returns newest first.",
+    "and/or tag (e.g. 'QGIS MCP'). Returns newest first, limit (default 100, max 200) with "
+    "total/truncated; a single message is capped at 500 chars and says so.",
     structured_output=True,
 )
 async def get_message_log(

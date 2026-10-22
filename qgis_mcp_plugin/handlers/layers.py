@@ -39,6 +39,11 @@ from ..wire import zip_strict
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
 
+# Listing more layers than this in one call costs context and is never the
+# answer a caller wants; the response already carries total_count, so paging
+# with offset is available.
+_LAYER_LIMIT_MAX = 100
+
 
 def _to_bool(value):
     """Parse a boolean the MCP tool may send as a string.
@@ -113,6 +118,13 @@ class LayerHandlers:
 
     @command
     def get_layers(self, limit=50, offset=0, **kwargs):
+        limit = int(limit)
+        if limit <= 0:
+            raise CommandError("limit must be positive")
+        if limit > _LAYER_LIMIT_MAX:
+            raise CommandError(
+                f"limit {limit} exceeds the maximum of {_LAYER_LIMIT_MAX}; page with offset"
+            )
         project = QgsProject.instance()
         all_layers = list(project.mapLayers().items())
         total_count = len(all_layers)

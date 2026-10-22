@@ -612,3 +612,72 @@ def test_a_new_output_passes(file_output):
     server = with_run(writes=b"new")
 
     assert server._run_alg("gdal:translate", {"OUTPUT": str(out)})["OUTPUT"] == str(out)
+
+
+# --- algorithm listing: provider summary, paging and caps ---
+
+
+class _Alg:
+    def __init__(self, alg_id, name, provider_id):
+        self._id = alg_id
+        self._name = name
+        self._provider_id = provider_id
+
+    def id(self):
+        return self._id
+
+    def displayName(self):
+        return self._name
+
+    def provider(self):
+        provider_id = self._provider_id
+
+        class _Provider:
+            def id(self):
+                return provider_id
+
+        return _Provider()
+
+
+@pytest.fixture
+def registry(plugin_handlers, monkeypatch):
+    algorithms = [_Alg(f"native:alg{i}", f"Algorithm {i}", "native") for i in range(120)]
+    algorithms.append(_Alg("gdal:warpreproject", "Warp (reproject)", "gdal"))
+
+    class _Registry:
+        def algorithms(self):
+            return algorithms
+
+    monkeypatch.setattr(
+        plugin_handlers.processing.QgsApplication, "processingRegistry", lambda: _Registry()
+    )
+    return algorithms
+
+
+def test_listing_without_filters_returns_provider_counts(plugin_handlers, registry):
+    """The no-argument call used to return ~1k rows; the counts say what to search."""
+    server = plugin_handlers.processing.ProcessingHandlers()
+
+    result = server.list_processing_algorithms()
+
+    assert result["providers"] == {"native": 120, "gdal": 1}
+    assert result["total"] == 121
+    assert "algorithms" not in result
+    assert "search=" in result["hint"]
+
+
+def test_listing_pages_and_reports_the_total(plugin_handlers, registry):
+    server = plugin_handlers.processing.ProcessingHandlers()
+
+    first = server.list_processing_algorithms(search="algorithm", limit=10)
+    last = server.list_processing_algorithms(search="algorithm", limit=50, offset=100)
+
+    assert (first["count"], first["total"], first["truncated"]) == (10, 120, True)
+    assert (last["count"], last["truncated"]) == (20, False)
+
+
+def test_listing_refuses_a_limit_over_the_max(plugin_handlers, registry):
+    server = plugin_handlers.processing.ProcessingHandlers()
+
+    with pytest.raises(plugin_handlers.processing.CommandError, match="maximum of 100"):
+        server.list_processing_algorithms(search="algorithm", limit=500)

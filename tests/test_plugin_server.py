@@ -221,3 +221,10 @@ def test_execute_code_small_output_is_untouched(server):
     assert result["stdout"] == "hello\n"
     assert "stdout_truncated" not in result
     assert "stdout_total_chars" not in result
+
+
+def test_get_layers_refuses_a_limit_over_the_max(server):
+    response = server._dispatch({"type": "get_layers", "params": {"limit": 500}})
+
+    assert response["status"] == "error"
+    assert "maximum of 100" in response["message"]

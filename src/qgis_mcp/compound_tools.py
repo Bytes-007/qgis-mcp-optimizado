@@ -996,7 +996,10 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
         return await _send("execute_processing_batch", payload, timeout=socket_timeout)
 
     async def processing_list_algorithms(ctx, kwargs):
-        payload = {}
+        payload: dict[str, Any] = {
+            "limit": kwargs.get("limit", 50),
+            "offset": kwargs.get("offset", 0),
+        }
         for key in ("search", "provider"):
             if key in kwargs:
                 payload[key] = kwargs[key]
@@ -1069,7 +1072,8 @@ def register_compound_tools(mcp: FastMCP, _send, _confirm_destructive):  # noqa:
             "- execute_batch: algorithm (str), parameters_list (list[dict]), timeout (int, optional, "
             "seconds for the whole batch, default 55), ellipsoid (str, optional) - one run per "
             "dict, per-run success/error/skipped status\n"
-            "- list_algorithms: search (str, optional), provider (str, optional)\n"
+            "- list_algorithms: search (str), provider (str), limit (int, default 50, max 100), "
+            "offset (int); with no filter it returns provider counts\n"
             "- get_help: algorithm_id (str)\n"
             "- get_providers: no params - providers with algorithm counts and active status\n"
             "- list_models: no params - registered Processing models (id, name, group)\n"

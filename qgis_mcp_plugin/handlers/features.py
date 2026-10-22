@@ -52,6 +52,10 @@ from ..errors import CommandError
 from ..registry import command
 
 # Child accessors of each QgsExpressionNode kind; PyQGIS has no findNodes().
+# A sample of distinct values is a hint, not the data: one column of long
+# descriptions would otherwise be the whole payload.
+_DISTINCT_VALUE_CHARS = 80
+
 _SINGLE_CHILDREN = (
     "opLeft",
     "opRight",
@@ -225,7 +229,13 @@ class FeatureHandlers:
                 # returned a different 50 values each time.
                 unique = sorted(set(str(v) for v in distinct_val if v is not None))
                 stats["distinct_count"] = len(unique)
-                stats["distinct_values"] = unique[:50]
+                sample = unique[:50]
+                stats["distinct_values"] = [
+                    value if len(value) <= _DISTINCT_VALUE_CHARS else value[:_DISTINCT_VALUE_CHARS] + "…"
+                    for value in sample
+                ]
+                if any(len(value) > _DISTINCT_VALUE_CHARS for value in sample):
+                    stats["distinct_values_clipped"] = True
 
         return stats
 

@@ -55,6 +55,12 @@ from ..registry import command
 _MAX_TRACKED_ERRORS = 10
 _MAX_ERROR_LENGTH = 500
 
+# A no-argument listing used to return every registered algorithm - about a
+# thousand entries with GRASS and SAGA installed, which floods the context
+# instead of answering it. Without a filter the provider counts are the answer.
+_ALGORITHM_LIMIT_DEFAULT = 50
+_ALGORITHM_LIMIT_MAX = 100
+
 
 class _CollectingFeedback(QgsProcessingFeedback):
     """Processing feedback that keeps the errors an algorithm reports."""
@@ -584,10 +590,38 @@ class ProcessingHandlers:
         return self._job_summary(job)
 
     @command
-    def list_processing_algorithms(self, search=None, provider=None, **kwargs):
+    def list_processing_algorithms(
+        self, search=None, provider=None, limit=_ALGORITHM_LIMIT_DEFAULT, offset=0, **kwargs
+    ):
         registry = QgsApplication.processingRegistry()
-        algorithms = []
+        limit = int(limit)
+        offset = int(offset)
+        if limit <= 0:
+            raise CommandError("limit must be positive")
+        if limit > _ALGORITHM_LIMIT_MAX:
+            # Refused rather than clamped: a caller that asked for 500 and got
+            # 100 reads the short list as the complete one.
+            raise CommandError(
+                f"limit {limit} exceeds the maximum of {_ALGORITHM_LIMIT_MAX}; page with offset"
+            )
+        if offset < 0:
+            raise CommandError("offset must not be negative")
 
+        if not search and not provider:
+            counts: dict[str, int] = {}
+            for alg in registry.algorithms():
+                provider_id = alg.provider().id()
+                counts[provider_id] = counts.get(provider_id, 0) + 1
+            return {
+                "providers": counts,
+                "total": sum(counts.values()),
+                "hint": (
+                    "Pass search= (name or id substring) or provider= to list algorithms; "
+                    "limit/offset page the result."
+                ),
+            }
+
+        matches = []
         for alg in registry.algorithms():
             if provider and alg.provider().id() != provider:
                 continue
@@ -597,7 +631,7 @@ class ProcessingHandlers:
                 in_name = search_lower in alg.displayName().lower()
                 if not in_id and not in_name:
                     continue
-            algorithms.append(
+            matches.append(
                 {
                     "id": alg.id(),
                     "name": alg.displayName(),
@@ -605,7 +639,14 @@ class ProcessingHandlers:
                 }
             )
 
-        return {"algorithms": algorithms, "count": len(algorithms)}
+        page = matches[offset:offset + limit]
+        return {
+            "algorithms": page,
+            "count": len(page),
+            "total": len(matches),
+            "offset": offset,
+            "truncated": len(matches) > offset + len(page),
+        }
 
     @command
     def get_algorithm_help(self, algorithm_id, **kwargs):

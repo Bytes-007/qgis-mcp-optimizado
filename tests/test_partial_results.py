@@ -123,3 +123,20 @@ def test_project_info_flags_the_ten_layer_cap(server, project, n, truncated):  #
     assert info["layer_count"] == n
     assert len(info["layers"]) == min(n, 10)
     assert info["layers_truncated"] is truncated
+
+
+def test_message_log_refuses_a_limit_over_the_max(log_server, CommandError):  # noqa: F811
+    with pytest.raises(CommandError, match="maximum of 200"):
+        log_server.get_message_log(limit=500)
+
+
+def test_message_log_clips_a_huge_message_and_leaves_the_log_alone(server):  # noqa: F811
+    """The deque is the log itself: clipping it would lose what the user reads."""
+    server._message_log = [{"level": "info", "tag": "MCP", "message": "x" * 2000}]
+
+    entry = server.get_message_log()["messages"][0]
+
+    assert entry["message_total_chars"] == 2000
+    assert len(entry["message"]) < 2000
+    assert "truncated" in entry["message"]
+    assert len(server._message_log[0]["message"]) == 2000

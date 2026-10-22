@@ -42,6 +42,11 @@ _MAX_OUTPUT_CHARS_CAP = 50000
 _MAX_TRACEBACK_CHARS = 8000
 _MAX_ERROR_CHARS = 2000
 
+# The message log is a second stream nobody caps by default: a plugin that logs
+# a whole feature collection in one message floods the context the same way.
+_LOG_LIMIT_MAX = 200
+_LOG_MESSAGE_CHARS = 500
+
 
 def _clip(text, limit, keep_tail=0):
     """``(text, truncated, total_chars)`` with the middle dropped when too long."""
@@ -309,23 +314,40 @@ class SystemHandlers:
         if tag:
             entries = [e for e in entries if e["tag"] == tag]
         total = len(entries)
+        limit = int(limit)
+        if limit <= 0:
+            raise CommandError("limit must be positive")
+        if limit > _LOG_LIMIT_MAX:
+            raise CommandError(
+                f"limit {limit} exceeds the maximum of {_LOG_LIMIT_MAX}; page with a lower limit"
+            )
         entries = entries[:limit]
+        messages = []
+        for entry in entries:
+            text, truncated, message_total = _clip(entry["message"], _LOG_MESSAGE_CHARS)
+            if truncated:
+                # Copy, never mutate: the deque is the log itself and the next
+                # caller (or the user's Log Messages panel) gets the full text.
+                entry = dict(entry, message=text, message_total_chars=message_total)
+            messages.append(entry)
         return {
-            "messages": entries,
-            "count": len(entries),
+            "messages": messages,
+            "count": len(messages),
             "total": total,
-            "truncated": total > len(entries),
+            "truncated": total > len(messages),
         }
 
     @command
     def list_plugins(self, enabled_only=False, **kwargs):
         names = active_plugins if enabled_only else available_plugins
+        # No path here: it is a long absolute path the model has no use for when
+        # picking a plugin, and it was paid for on every listing. get_plugin_info
+        # still returns it for the one plugin someone asked about.
         result = [
             {
                 "name": name,
                 "enabled": name in active_plugins,
                 "version": pluginMetadata(name, "version") or "",
-                "path": pluginMetadata(name, "path") or "",
             }
             for name in sorted(names)
         ]
