@@ -78,15 +78,30 @@ check("features(fields): fork returns only requested fields",
       all(set(row) <= set(FC) | {"_fid"} for row in f["features"]))
 
 # --- 5. expression filter: same result both --------------------------------
-expr = "upper('NOMBRE_VER') LIKE '%PANTANO%'" if True else None
-# upstream may not accept expression? it does (documented); test equality
+# NOMBRE_VER must be a COLUMN ref (double quotes); single quotes make it a
+# string literal that never matches and the check passes vacuously.
+expr = "upper(\"NOMBRE_VER\") LIKE '%PANTANO%'"
 try:
     u = send(UP, "get_layer_features", {"layer_id": VEREDAS, "limit": 10, "expression": expr})
     f = send(FORK, "get_layer_features", {"layer_id": VEREDAS, "limit": 10, "expression": expr})
     f.pop("value_chars_clipped", None)
+    check("features(expression): matched > 0", u.get("matched", 0) > 0,
+          f"matched={u.get('matched')} - expression selects nothing")
     check("features(expression): identical", u == f)
 except Exception as e:
     check("features(expression): identical", False, str(e))
+
+# --- 5b. expression reading an unprojected column must not skew the match ---
+expr_col = "\"NOMB_MPIO\" LIKE '%Chin%'"
+try:
+    uf = send(UP, "get_layer_features",
+              {"layer_id": VEREDAS, "limit": 10, "expression": expr_col})
+    ffk = send(FORK, "get_layer_features",
+               {"layer_id": VEREDAS, "limit": 10, "expression": expr_col, "fields": FC})
+    check("features(fields+expression on unprojected col): same matched",
+          uf.get("matched") == ffk.get("matched"))
+except Exception as e:
+    check("features(fields+expression on unprojected col): same matched", False, str(e))
 
 # --- 6. list_processing_algorithms: fork summary matches upstream counts ----
 u = send(UP, "list_processing_algorithms", {})["algorithms"]

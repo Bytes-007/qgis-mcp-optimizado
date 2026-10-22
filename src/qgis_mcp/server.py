@@ -1007,9 +1007,16 @@ async def get_layer_features(
     # Large Results to Resources (Task 9). Keyed off what came back, not what was
     # asked for: a limit of 50 that matched 3 features is not a large result.
     if len(result.get("features", [])) > 20:
+        n = len(result["features"])
         uri = _cache_as_resource(result["features"])
+        # Features go to the resource *instead* of staying here: keeping both
+        # copies paid the context twice, the same flooding the cache avoids.
+        del result["features"]
         result["features_resource"] = uri
-        result["_hint"] = f"Result contains many features. You can also access them via {uri}"
+        result["_hint"] = (
+            f"All {n} features moved to the resource {uri}; "
+            "read the resource instead of re-querying with a wider limit."
+        )
 
     return result
 
@@ -3406,7 +3413,7 @@ async def handle_completion(ref, argument: CompletionArgument, context=None):
         try:
             now = time.monotonic()
             if now - _completion_cache_at >= _COMPLETION_TTL or not _completion_cache:
-                result = await _send("get_layers", {"limit": 200, "offset": 0})
+                result = await _send("get_layers", {"limit": 100, "offset": 0})
                 layers = result.get("layers", [])
                 _completion_cache = [layer["id"] for layer in layers]
                 _completion_cache_at = now
